@@ -1,0 +1,499 @@
+---
+interface Props {
+  isFriday: boolean;
+}
+const { isFriday } = Astro.props;
+---
+
+<div class="page">
+  <div class="layout">
+    <header>
+      <h1>🎡 Is it Friday?</h1>
+      <p class="subtitle">Spin the wheel to find out your fate.</p>
+    </header>
+
+    <div class="wheel-wrapper">
+      <div class="pointer">▼</div>
+      <canvas id="wheel" width="480" height="480"></canvas>
+    </div>
+
+    <button id="spinBtn" class="spin-btn">SPIN!</button>
+  </div>
+
+  <div id="result" class="result hidden">
+    <div class="result-inner">
+      <div id="resultEmoji" class="result-emoji"></div>
+      <div id="resultTitle" class="result-title"></div>
+      <div id="resultMsg" class="result-msg"></div>
+      <button id="closeResult" class="close-btn">Spin again</button>
+    </div>
+  </div>
+</div>
+
+<script define:vars={{ isFriday }}>
+  // --- Segment definitions ---
+  // Each segment: { label, color, emoji, win, message }
+  const LOSS_SEGMENTS = [
+    {
+      label: "A participation\ntrophy 🏆",
+      color: "#f87171",
+      emoji: "🏆",
+      win: false,
+      message: "Congratulations! You've won a participation trophy. It means absolutely nothing.",
+    },
+    {
+      label: "Mandatory\nMonday 😭",
+      color: "#fb923c",
+      emoji: "😭",
+      win: false,
+      message: "You've unlocked Mandatory Monday Mode. Please report to your desk immediately.",
+    },
+    {
+      label: "Existential\nDread 😶",
+      color: "#facc15",
+      emoji: "😶",
+      win: false,
+      message: "The wheel has stared into the void and the void stared back. It's not Friday.",
+    },
+    {
+      label: "A coupon for\nfree air 🌬️",
+      color: "#4ade80",
+      emoji: "🌬️",
+      win: false,
+      message: "Redeemable anywhere air is available. Sorry, no Friday included.",
+    },
+    {
+      label: "More\nmeetings 📅",
+      color: "#38bdf8",
+      emoji: "📅",
+      win: false,
+      message: "You've won three extra syncs, a retro, and a pre-meeting meeting. Enjoy!",
+    },
+    {
+      label: "A strongly-\nworded email ✉️",
+      color: "#818cf8",
+      emoji: "✉️",
+      win: false,
+      message: "Someone has CC'd your manager. We're not saying why. It's not Friday though.",
+    },
+    {
+      label: "Dial-up\ninternet 📠",
+      color: "#e879f9",
+      emoji: "📠",
+      win: false,
+      message: "Your internet speed has been reduced to 56kbps until further notice. Not Friday.",
+    },
+  ];
+
+  const FRIDAY_SEGMENT = {
+    label: "IT'S\nFRIDAY! 🎉",
+    color: "#ffd700",
+    emoji: "🎉",
+    win: true,
+    message: "🥳 YES! It's actually Friday! Pack up, you've earned the weekend. Go celebrate!",
+  };
+
+  // Build segment array: Friday slot at index 0 if it's Friday, replaced with a loss otherwise
+  const segments = isFriday
+    ? [FRIDAY_SEGMENT, ...LOSS_SEGMENTS]
+    : [
+        {
+          label: "Nice try,\nno Friday 😏",
+          color: "#ffd700",
+          emoji: "😏",
+          win: false,
+          message: "The golden slot! But it's not Friday, so it's just shiny disappointment.",
+        },
+        ...LOSS_SEGMENTS,
+      ];
+
+  const NUM = segments.length; // 8
+  const SLICE = (2 * Math.PI) / NUM;
+
+  // --- Canvas drawing ---
+  const canvas = document.getElementById("wheel");
+  const ctx = canvas.getContext("2d");
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const R = cx - 10;
+
+  function drawWheel(rotation) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Shadow
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = 24;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, 2 * Math.PI);
+    ctx.fillStyle = "#1e1e2e";
+    ctx.fill();
+    ctx.restore();
+
+    segments.forEach((seg, i) => {
+      const startAngle = rotation + i * SLICE;
+      const endAngle = startAngle + SLICE;
+      const midAngle = startAngle + SLICE / 2;
+
+      // Slice
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, R, startAngle, endAngle);
+      ctx.closePath();
+      ctx.fillStyle = seg.color;
+      ctx.fill();
+      ctx.strokeStyle = "#1e1e2e";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Label — flip text on left half so it always reads outward
+      ctx.save();
+      ctx.translate(cx, cy);
+      const normalised = ((midAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      const onLeft = normalised > Math.PI / 2 && normalised < (3 * Math.PI) / 2;
+      if (onLeft) {
+        ctx.rotate(midAngle + Math.PI);
+        ctx.textAlign = "left";
+      } else {
+        ctx.rotate(midAngle);
+        ctx.textAlign = "right";
+      }
+      ctx.fillStyle = "#1e1e2e";
+      ctx.font = "bold 13px system-ui, sans-serif";
+      const lines = seg.label.split("\n");
+      const lineH = 16;
+      const textR = onLeft ? -(R - 14) : R - 14;
+      lines.forEach((line, li) => {
+        const yOff = (li - (lines.length - 1) / 2) * lineH;
+        ctx.fillText(line, textR, yOff + 4);
+      });
+      ctx.restore();
+    });
+
+    // Centre hub
+    ctx.beginPath();
+    ctx.arc(cx, cy, 22, 0, 2 * Math.PI);
+    ctx.fillStyle = "#1e1e2e";
+    ctx.fill();
+    ctx.strokeStyle = "#ffd700";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Centre dot
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7, 0, 2 * Math.PI);
+    ctx.fillStyle = "#ffd700";
+    ctx.fill();
+  }
+
+  // --- Spin logic ---
+  let currentRotation = -Math.PI / 2; // start with segment 0 at the top
+  let spinning = false;
+
+  drawWheel(currentRotation);
+
+  // The pointer sits at the top (270° = -π/2). A segment is "hit" when its
+  // midpoint angle mod 2π is closest to the pointer after normalising.
+  function pickTargetSegmentIndex() {
+    if (isFriday) {
+      return 0; // always land on Friday when it IS Friday
+    }
+    // On non-Friday days, pick any loss segment (1-7), never 0
+    return 1 + Math.floor(Math.random() * (NUM - 1));
+  }
+
+  document.getElementById("spinBtn").addEventListener("click", () => {
+    if (spinning) return;
+    spinning = true;
+    document.getElementById("spinBtn").disabled = true;
+
+    const targetIndex = pickTargetSegmentIndex();
+
+    // We want the midpoint of targetIndex to land under the top pointer.
+    // Pointer is at -π/2. Segment mid = rotation + targetIndex*SLICE + SLICE/2.
+    // Solve for final rotation: finalRot + targetIndex*SLICE + SLICE/2 ≡ -π/2 (mod 2π)
+    // Add random jitter within ±40% of a slice so it doesn't always stop dead-centre.
+    const jitter = (Math.random() - 0.5) * SLICE * 0.4;
+    const targetMid = -Math.PI / 2 - jitter;
+    const baseAngle = targetMid - targetIndex * SLICE - SLICE / 2;
+
+    // Normalise to range [currentRotation - 2π, currentRotation]
+    let finalRotation = baseAngle % (2 * Math.PI);
+    // Make it spin at least 5 full rotations forward
+    while (finalRotation > currentRotation - 2 * Math.PI) {
+      finalRotation -= 2 * Math.PI;
+    }
+    finalRotation -= 5 * 2 * Math.PI;
+
+    const duration = 4500; // ms
+    const startRotation = currentRotation;
+    const startTime = performance.now();
+
+    function easeOut(t) {
+      // Cubic ease-out
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function animate(now) {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      const rot = startRotation + (finalRotation - startRotation) * easeOut(t);
+      drawWheel(rot);
+
+      if (t < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        currentRotation = finalRotation;
+        spinning = false;
+        showResult(segments[targetIndex]);
+      }
+    }
+
+    requestAnimationFrame(animate);
+  });
+
+  // --- Result overlay ---
+  function showResult(seg) {
+    document.getElementById("resultEmoji").textContent = seg.emoji;
+    document.getElementById("resultTitle").textContent = seg.win ? "🎉 YOU WON! 🎉" : "😬 Not quite…";
+    document.getElementById("resultMsg").textContent = seg.message;
+    const resultEl = document.getElementById("result");
+    resultEl.classList.remove("hidden");
+    resultEl.classList.add(seg.win ? "win" : "loss");
+  }
+
+  document.getElementById("closeResult").addEventListener("click", () => {
+    const resultEl = document.getElementById("result");
+    resultEl.classList.add("hidden");
+    resultEl.classList.remove("win", "loss");
+    document.getElementById("spinBtn").disabled = false;
+  });
+</script>
+
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  .page {
+    min-height: 100vh;
+    background: #0f0f1a;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1.5rem;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  /* Desktop: 2-column grid. Header and button share the left column. */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "header wheel"
+      "btn    wheel";
+    align-items: center;
+    gap: 1.5rem 4rem;
+    width: 100%;
+    max-width: 1000px;
+  }
+
+  header {
+    grid-area: header;
+    text-align: left;
+    align-self: end;
+  }
+
+  .wheel-wrapper {
+    grid-area: wheel;
+  }
+
+  .spin-btn {
+    grid-area: btn;
+    align-self: start;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    margin: 0 0 0.4rem;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+
+  .subtitle {
+    color: #94a3b8;
+    font-size: 1.1rem;
+    margin: 0;
+  }
+
+  /* Mobile: single column, header → wheel → button */
+  @media (max-width: 700px) {
+    .page {
+      padding: 2rem 1rem;
+    }
+
+    .layout {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto;
+      grid-template-areas:
+        "header"
+        "wheel"
+        "btn";
+      gap: 1.5rem;
+      justify-items: center;
+    }
+
+    header {
+      text-align: center;
+      align-self: auto;
+    }
+
+    .spin-btn {
+      align-self: auto;
+    }
+  }
+
+  .wheel-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .pointer {
+    font-size: 2rem;
+    color: #ffd700;
+    line-height: 1;
+    margin-bottom: -8px;
+    z-index: 1;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  }
+
+  canvas {
+    border-radius: 50%;
+    width: min(480px, 90vw, 70vh);
+    height: min(480px, 90vw, 70vh);
+  }
+
+  .spin-btn {
+    background: #ffd700;
+    color: #1e1e2e;
+    border: none;
+    border-radius: 9999px;
+    padding: 0.85rem 3rem;
+    font-size: 1.3rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+    box-shadow: 0 4px 20px rgba(255, 215, 0, 0.35);
+  }
+
+  .spin-btn:hover:not(:disabled) {
+    transform: scale(1.06);
+    box-shadow: 0 6px 28px rgba(255, 215, 0, 0.5);
+  }
+
+  .spin-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .spin-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Result overlay */
+  .result {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+    padding: 1rem;
+  }
+
+  .result.hidden {
+    display: none;
+  }
+
+  .result-inner {
+    background: #1e1e2e;
+    border: 2px solid #334155;
+    border-radius: 1.5rem;
+    padding: 2.5rem 2rem;
+    max-width: 480px;
+    width: 100%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .result.win .result-inner {
+    border-color: #ffd700;
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.3);
+  }
+
+  .result.loss .result-inner {
+    border-color: #475569;
+  }
+
+  .result-emoji {
+    font-size: 4rem;
+    line-height: 1;
+  }
+
+  .result-title {
+    font-size: 1.6rem;
+    font-weight: 800;
+  }
+
+  .result.win .result-title {
+    color: #ffd700;
+  }
+
+  .result.loss .result-title {
+    color: #94a3b8;
+  }
+
+  .result-msg {
+    font-size: 1rem;
+    color: #cbd5e1;
+    line-height: 1.5;
+  }
+
+  .close-btn {
+    margin-top: 0.5rem;
+    background: transparent;
+    border: 2px solid #475569;
+    color: #94a3b8;
+    border-radius: 9999px;
+    padding: 0.6rem 2rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  .close-btn:hover {
+    border-color: #ffd700;
+    color: #ffd700;
+  }
+
+  @keyframes popIn {
+    from {
+      transform: scale(0.7);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+</style>
