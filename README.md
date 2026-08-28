@@ -44,3 +44,11 @@ All commands are run from the root of the project, from a terminal:
 ## 👀 Want to learn more?
 
 Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+
+## Netlify deployment
+
+This project is configured for Netlify SSR deployment using `@astrojs/netlify`.
+
+- Build command: `npm run build`
+- Publish directory: `dist`
+- Node version: `22` (configured in `netlify.toml`)
